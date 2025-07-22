@@ -43,7 +43,7 @@ const explanationLevels = [
   { value: "beginner-level", label: "Beginner-level", description: "Simplified explanations for learning" },
 ];
 
-const GEMINI_API_KEY = "AIzaSyDtsBhTogmGinf6u52eImp5oq9cBHQ2xNQ";
+const GEMINI_API_KEY = "";
 
 export default function CommentPage() {
   const [code, setCode] = useState("");
