@@ -1,15 +1,14 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState, useRef, useCallback } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+import React, { useState, useRef, useCallback } from "react";
+import Link from "next/link";
+// Import your UI components as before...
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Code,
   Upload,
@@ -25,7 +24,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
 const languages = [
   { value: "python", label: "Python", ext: "py" },
@@ -36,160 +35,139 @@ const languages = [
   { value: "go", label: "Go", ext: "go" },
   { value: "php", label: "PHP", ext: "php" },
   { value: "csharp", label: "C#", ext: "cs" },
-]
+];
 
 const explanationLevels = [
   { value: "line-by-line", label: "Line-by-line", description: "Detailed explanation for every line" },
   { value: "function-level", label: "Function-level", description: "Moderate explanations for functions and blocks" },
   { value: "beginner-level", label: "Beginner-level", description: "Simplified explanations for learning" },
-]
+];
+
+const GEMINI_API_KEY = "AIzaSyDtsBhTogmGinf6u52eImp5oq9cBHQ2xNQ";
 
 export default function CommentPage() {
-  const [code, setCode] = useState("")
-  const [commentedCode, setCommentedCode] = useState("")
-  const [language, setLanguage] = useState("python")
-  const [explanationLevel, setExplanationLevel] = useState("function-level")
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [activeTab, setActiveTab] = useState("original")
-  const [copied, setCopied] = useState(false)
-  const [showFeedback, setShowFeedback] = useState(false)
-  const [isDragOver, setIsDragOver] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [code, setCode] = useState("");
+  const [commentedCode, setCommentedCode] = useState("");
+  const [language, setLanguage] = useState("python");
+  const [explanationLevel, setExplanationLevel] = useState("function-level");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [activeTab, setActiveTab] = useState("original");
+  const [copied, setCopied] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stats = {
     linesScanned: code.split("\n").filter((line) => line.trim()).length,
     commentsGenerated: commentedCode
       .split("\n")
       .filter((line) => line.trim().startsWith("#") || line.trim().startsWith("//")).length,
-  }
+  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }, [])
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }, [])
+    e.preventDefault();
+    setIsDragOver(false);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
+    e.preventDefault();
+    setIsDragOver(false);
 
-    const files = Array.from(e.dataTransfer.files)
-    const file = files[0]
+    const files = Array.from(e.dataTransfer.files);
+    const file = files[0];
 
     if (file && file.type.startsWith("text/")) {
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = (e) => {
-        const content = e.target?.result as string
-        setCode(content)
-      }
-      reader.readAsText(file)
+        const content = e.target?.result as string;
+        setCode(content);
+      };
+      reader.readAsText(file);
     }
-  }, [])
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = (e) => {
-        const content = e.target?.result as string
-        setCode(content)
-      }
-      reader.readAsText(file)
+        const content = e.target?.result as string;
+        setCode(content);
+      };
+      reader.readAsText(file);
     }
-  }
+  };
 
+  // THIS FUNCTION CALLS GEMINI API DIRECTLY
   const handleCommentCode = async () => {
-    if (!code.trim()) return
+    if (!code.trim()) return;
 
-    setIsProcessing(true)
-    setActiveTab("commented")
+    setIsProcessing(true);
+    setActiveTab("commented");
 
-    // Simulate API processing
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-
-    // Mock commented code generation
-    const mockCommentedCode = generateMockComments(code, language, explanationLevel)
-    setCommentedCode(mockCommentedCode)
-    setIsProcessing(false)
-    setShowFeedback(true)
-  }
-
-  const generateMockComments = (inputCode: string, lang: string, level: string) => {
-    const lines = inputCode.split("\n")
-    const result: string[] = []
-
-    if (level === "line-by-line") {
-      lines.forEach((line) => {
-        if (line.trim()) {
-          result.push(`# ${getLineComment(line, lang)}`)
-          result.push(line)
-        } else {
-          result.push(line)
+    try {
+      const prompt = `Add helpful comments to this ${language} code at the ${explanationLevel}:\n${code}`;
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              { parts: [{ text: prompt }] }
+            ]
+          }),
         }
-      })
-    } else if (level === "function-level") {
-      lines.forEach((line) => {
-        if (line.includes("def ") || line.includes("function ") || line.includes("class ")) {
-          result.push(`# ${getFunctionComment(line, lang)}`)
-        }
-        result.push(line)
-      })
-    } else {
-      result.push("# This code performs the following operations:")
-      result.push("# - Processes input data")
-      result.push("# - Executes main logic")
-      result.push("# - Returns or displays results")
-      result.push("")
-      result.push(...lines)
+      );
+      const data = await res.json();
+      const aiComments = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No comments generated.";
+      setCommentedCode(aiComments);
+    } catch (error) {
+      setCommentedCode("Failed to get AI comments.");
+    } finally {
+      setIsProcessing(false);
+      setShowFeedback(true);
     }
+  };
 
-    return result.join("\n")
-  }
-
-  const getLineComment = (line: string, lang: string) => {
-    if (line.includes("=")) return "Assigns value to variable"
-    if (line.includes("print") || line.includes("console.log")) return "Outputs data to console"
-    if (line.includes("if")) return "Conditional statement"
-    if (line.includes("for") || line.includes("while")) return "Loop iteration"
-    return "Executes operation"
-  }
-
-  const getFunctionComment = (line: string, lang: string) => {
-    if (line.includes("def ")) return "Function definition - handles specific task"
-    if (line.includes("class ")) return "Class definition - defines object structure"
-    return "Code block definition"
-  }
-
+  // SAFE CLIPBOARD FUNCTION
   const handleCopy = async () => {
-    if (commentedCode) {
-      await navigator.clipboard.writeText(commentedCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+    if (!commentedCode) return;
+    if (typeof window !== "undefined" && navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(commentedCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (e) {
+        alert("Copy to clipboard failed.");
+      }
+    } else {
+      alert("Clipboard access not supported!");
     }
-  }
+  };
 
   const handleDownload = () => {
     if (commentedCode) {
-      const selectedLang = languages.find((l) => l.value === language)
-      const blob = new Blob([commentedCode], { type: "text/plain" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `commented_code.${selectedLang?.ext || "txt"}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const selectedLang = languages.find((l) => l.value === language);
+      const blob = new Blob([commentedCode], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `commented_code.${selectedLang?.ext || "txt"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
@@ -217,7 +195,6 @@ export default function CommentPage() {
           <p className="text-gray-400">Upload or paste your code to get intelligent AI-powered comments</p>
         </div>
 
-        {/* Controls */}
         <Card className="mb-6 border-gray-700 bg-gray-800/50">
           <CardContent className="p-6">
             <div className="grid gap-6 md:grid-cols-3">
@@ -236,7 +213,6 @@ export default function CommentPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Explanation Level</label>
                 <Select value={explanationLevel} onValueChange={setExplanationLevel}>
@@ -255,7 +231,6 @@ export default function CommentPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="flex flex-col justify-end">
                 <Button
                   onClick={handleCommentCode}
@@ -316,7 +291,6 @@ export default function CommentPage() {
                   className="hidden"
                 />
               </div>
-
               {/* Code Editor */}
               <div className="border-t border-gray-700">
                 <Textarea
@@ -327,7 +301,6 @@ export default function CommentPage() {
                   style={{ fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace' }}
                 />
               </div>
-
               <div className="border-t border-gray-700 bg-gray-800 px-4 py-2 flex justify-between text-xs text-gray-400">
                 <span>Language: {language.toUpperCase()}</span>
                 <span>{code.split("\n").length} lines</span>
@@ -386,7 +359,6 @@ export default function CommentPage() {
                     Commented Code
                   </TabsTrigger>
                 </TabsList>
-
                 <TabsContent value="original" className="mt-0">
                   <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
                     {code || (
@@ -397,7 +369,6 @@ export default function CommentPage() {
                     )}
                   </pre>
                 </TabsContent>
-
                 <TabsContent value="commented" className="mt-0">
                   {isProcessing ? (
                     <div className="flex items-center justify-center min-h-[400px] bg-gray-900">
@@ -428,7 +399,6 @@ export default function CommentPage() {
                 </TabsContent>
               </Tabs>
 
-              {/* Stats */}
               {commentedCode && (
                 <div className="border-t border-gray-700 bg-gray-800 px-4 py-2">
                   <div className="flex items-center justify-between text-xs text-gray-400">
@@ -490,5 +460,5 @@ export default function CommentPage() {
         )}
       </main>
     </div>
-  )
+  );
 }
