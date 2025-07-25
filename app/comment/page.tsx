@@ -2,10 +2,15 @@
 
 import React, { useState, useRef, useCallback } from "react";
 import Link from "next/link";
-// Import your UI components as before...
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +31,7 @@ import {
   X,
 } from "lucide-react";
 
+// ----- Feature State/Options
 const languages = [
   { value: "python", label: "Python", ext: "py" },
   { value: "javascript", label: "JavaScript", ext: "js" },
@@ -38,18 +44,39 @@ const languages = [
 ];
 
 const explanationLevels = [
-  { value: "line-by-line", label: "Line-by-line", description: "Detailed explanation for every line" },
-  { value: "function-level", label: "Function-level", description: "Moderate explanations for functions and blocks" },
-  { value: "beginner-level", label: "Beginner-level", description: "Simplified explanations for learning" },
+  {
+    value: "line-by-line",
+    label: "Line-by-line",
+    description: "Detailed explanation for every line",
+  },
+  {
+    value: "function-level",
+    label: "Function-level",
+    description: "Moderate explanations for functions and blocks",
+  },
+  {
+    value: "beginner-level",
+    label: "Beginner-level",
+    description: "Simplified explanations for learning",
+  },
 ];
 
-const GEMINI_API_KEY = "";
+const features = [
+  { value: "comment", label: "Comment Code" },
+  { value: "summarize", label: "Summarize Code" },
+  { value: "generate-tests", label: "Generate Test Cases" },
+];
+
+// REPLACE with your actual Gemini API key for production
+const GEMINI_API_KEY = "AIzaSyDtsBhTogmGinf6u52eImp5oq9cBHQ2xNQ";
+// Preferably: const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
 export default function CommentPage() {
   const [code, setCode] = useState("");
-  const [commentedCode, setCommentedCode] = useState("");
+  const [outputText, setOutputText] = useState("");
   const [language, setLanguage] = useState("python");
   const [explanationLevel, setExplanationLevel] = useState("function-level");
+  const [selectedFeature, setSelectedFeature] = useState("comment");
   const [isProcessing, setIsProcessing] = useState(false);
   const [activeTab, setActiveTab] = useState("original");
   const [copied, setCopied] = useState(false);
@@ -57,11 +84,20 @@ export default function CommentPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // === NEW: State for summary style (plain | bullets | insights)
+  const [summaryStyle, setSummaryStyle] = useState("plain");
+
   const stats = {
     linesScanned: code.split("\n").filter((line) => line.trim()).length,
-    commentsGenerated: commentedCode
-      .split("\n")
-      .filter((line) => line.trim().startsWith("#") || line.trim().startsWith("//")).length,
+    commentsGenerated:
+      selectedFeature === "comment"
+        ? outputText
+            .split("\n")
+            .filter(
+              (line) =>
+                line.trim().startsWith("#") || line.trim().startsWith("//")
+            ).length
+        : 0,
   };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -103,44 +139,70 @@ export default function CommentPage() {
     }
   };
 
-  // THIS FUNCTION CALLS GEMINI API DIRECTLY
-  const handleCommentCode = async () => {
+  // === MODIFIED: Platform Prompts using summaryStyle for 'summarize'
+  const handleAIRequest = async () => {
     if (!code.trim()) return;
 
     setIsProcessing(true);
-    setActiveTab("commented");
+    setActiveTab(
+      selectedFeature === "comment"
+        ? "commented"
+        : selectedFeature === "summarize"
+        ? "summary"
+        : "testcases"
+    );
+    setOutputText(""); // Clear output on new request
 
     try {
-      const prompt = `Add helpful comments to this ${language} code at the ${explanationLevel}:\n${code}`;
+      let prompt = "";
+      switch (selectedFeature) {
+        case "comment":
+          prompt = `Add helpful comments to this ${language} code at the ${explanationLevel}:\n${code}`;
+          break;
+        case "summarize":
+          prompt = `Summarize the following ${language} code in a ${
+            summaryStyle === "bullets"
+              ? "bulleted list"
+              : summaryStyle === "insights"
+              ? "list of key insights"
+              : "plain paragraph"
+          }:\n${code}`;
+          break;
+        case "generate-tests":
+          prompt = `Generate unit test cases for the following ${language} code:\n${code}`;
+          break;
+        default:
+          prompt = code;
+      }
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${GEMINI_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [
-              { parts: [{ text: prompt }] }
-            ]
+            contents: [{ parts: [{ text: prompt }] }],
           }),
         }
       );
       const data = await res.json();
-      const aiComments = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No comments generated.";
-      setCommentedCode(aiComments);
+      const aiResponse =
+        data.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response generated.";
+      setOutputText(aiResponse);
     } catch (error) {
-      setCommentedCode("Failed to get AI comments.");
+      setOutputText("Failed to get AI response.");
     } finally {
       setIsProcessing(false);
       setShowFeedback(true);
     }
   };
 
-  // SAFE CLIPBOARD FUNCTION
+  // Clipboard Copy Handler
   const handleCopy = async () => {
-    if (!commentedCode) return;
+    if (!outputText) return;
     if (typeof window !== "undefined" && navigator?.clipboard?.writeText) {
       try {
-        await navigator.clipboard.writeText(commentedCode);
+        await navigator.clipboard.writeText(outputText);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch (e) {
@@ -151,20 +213,53 @@ export default function CommentPage() {
     }
   };
 
+  // Download Handler
   const handleDownload = () => {
-    if (commentedCode) {
+    if (outputText) {
       const selectedLang = languages.find((l) => l.value === language);
-      const blob = new Blob([commentedCode], { type: "text/plain" });
+      const fileExtension =
+        selectedFeature === "generate-tests"
+          ? "test." + (selectedLang?.ext || "txt")
+          : selectedFeature === "summarize"
+          ? "summary.txt"
+          : selectedLang?.ext || "txt";
+
+      const blob = new Blob([outputText], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `commented_code.${selectedLang?.ext || "txt"}`;
+      a.download = `output.${fileExtension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
   };
+
+  // Loading and Output placeholders
+  const LoadingPlaceholder = () => (
+    <div className="flex items-center justify-center min-h-[400px] bg-gray-900">
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-400 mx-auto mb-4" />
+        <p className="text-white">AI is processing your request...</p>
+        <div className="mt-4 w-64 bg-gray-700 rounded-full h-2 mx-auto">
+          <div
+            className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full animate-pulse"
+            style={{ width: "60%" }}
+          ></div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const OutputPlaceholder = ({ message }: { message: string }) => (
+    <div className="flex items-center justify-center min-h-[400px] bg-gray-900">
+      <div className="text-center text-gray-300">
+        <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+        <p className="text-white">{message}</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -191,13 +286,16 @@ export default function CommentPage() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8 text-center">
-          <h1 className="mb-4 text-3xl font-bold">Comment Your Code</h1>
-          <p className="text-gray-400">Upload or paste your code to get intelligent AI-powered comments</p>
+          <h1 className="mb-4 text-3xl font-bold">AI Code Assistant</h1>
+          <p className="text-gray-400">
+            Upload or paste your code to get AI-powered comments, summaries, or test cases.
+          </p>
         </div>
 
         <Card className="mb-6 border-gray-700 bg-gray-800/50">
           <CardContent className="p-6">
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-4">
+              {/* Programming Language Selector */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Programming Language</label>
                 <Select value={language} onValueChange={setLanguage}>
@@ -206,34 +304,86 @@ export default function CommentPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 border-gray-600 text-white">
                     {languages.map((lang) => (
-                      <SelectItem key={lang.value} value={lang.value} className="text-white hover:bg-gray-600">
+                      <SelectItem
+                        key={lang.value}
+                        value={lang.value}
+                        className="text-white hover:bg-gray-600"
+                      >
                         {lang.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Explanation Level (only for "Comment Code") */}
+              {selectedFeature === "comment" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white">Explanation Level</label>
+                  <Select value={explanationLevel} onValueChange={setExplanationLevel}>
+                    <SelectTrigger className="bg-gray-700 border-gray-600">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 border-gray-600 text-white">
+                      {explanationLevels.map((level) => (
+                        <SelectItem
+                          key={level.value}
+                          value={level.value}
+                          className="text-white hover:bg-gray-600"
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-white">{level.label}</span>
+                            <span className="text-xs text-gray-300">{level.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* ==== NEW: Summary Style (only for "Summarize Code") ==== */}
+              {selectedFeature === "summarize" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white">Summary Style</label>
+                  <Select value={summaryStyle} onValueChange={setSummaryStyle}>
+                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 border-gray-600 text-white">
+                      <SelectItem value="plain">Plain Text</SelectItem>
+                      <SelectItem value="bullets">Bullet Points</SelectItem>
+                      <SelectItem value="insights">Key Insights</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Feature Selector */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-white">Explanation Level</label>
-                <Select value={explanationLevel} onValueChange={setExplanationLevel}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600">
+                <label className="text-sm font-medium text-white">Feature</label>
+                <Select value={selectedFeature} onValueChange={setSelectedFeature}>
+                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 border-gray-600 text-white">
-                    {explanationLevels.map((level) => (
-                      <SelectItem key={level.value} value={level.value} className="text-white hover:bg-gray-600">
-                        <div className="flex flex-col">
-                          <span className="text-white">{level.label}</span>
-                          <span className="text-xs text-gray-300">{level.description}</span>
-                        </div>
+                    {features.map((feature) => (
+                      <SelectItem
+                        key={feature.value}
+                        value={feature.value}
+                        className="text-white hover:bg-gray-600"
+                      >
+                        {feature.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Action Button */}
               <div className="flex flex-col justify-end">
                 <Button
-                  onClick={handleCommentCode}
+                  onClick={handleAIRequest}
                   disabled={!code.trim() || isProcessing}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
                 >
@@ -245,7 +395,7 @@ export default function CommentPage() {
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-4 w-4" />
-                      Comment It
+                      {features.find((f) => f.value === selectedFeature)?.label ?? "Process"}
                     </>
                   )}
                 </Button>
@@ -321,7 +471,7 @@ export default function CommentPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleCopy}
-                    disabled={!commentedCode}
+                    disabled={!outputText}
                     className="border-gray-600 text-gray-300 hover:bg-gray-700 bg-transparent"
                   >
                     {copied ? (
@@ -340,7 +490,7 @@ export default function CommentPage() {
                     variant="outline"
                     size="sm"
                     onClick={handleDownload}
-                    disabled={!commentedCode}
+                    disabled={!outputText}
                     className="border-gray-600 text-gray-300 hover:bg-gray-700 bg-transparent"
                   >
                     <Download className="mr-2 h-4 w-4" />
@@ -352,13 +502,26 @@ export default function CommentPage() {
             <CardContent className="p-0">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="w-full bg-gray-800 border-b border-gray-700 rounded-none text-white">
-                  <TabsTrigger value="original" className="flex-1 text-white data-[state=active]:text-white">
+                  <TabsTrigger value="original" className="flex-1 text-sky-400 data-[state=active]:text-sky-500">
                     Original Code
                   </TabsTrigger>
-                  <TabsTrigger value="commented" className="flex-1 text-white data-[state=active]:text-white">
-                    Commented Code
-                  </TabsTrigger>
+                  {selectedFeature === "comment" && (
+                    <TabsTrigger value="commented" className="flex-1 text-sky-400 data-[state=active]:text-sky-500">
+                      Commented Code
+                    </TabsTrigger>
+                  )}
+                  {selectedFeature === "summarize" && (
+                    <TabsTrigger value="summary" className="flex-1 text-white data-[state=active]:text-white">
+                      Summary
+                    </TabsTrigger>
+                  )}
+                  {selectedFeature === "generate-tests" && (
+                    <TabsTrigger value="testcases" className="flex-1 text-white data-[state=active]:text-white">
+                      Test Cases
+                    </TabsTrigger>
+                  )}
                 </TabsList>
+
                 <TabsContent value="original" className="mt-0">
                   <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
                     {code || (
@@ -369,37 +532,47 @@ export default function CommentPage() {
                     )}
                   </pre>
                 </TabsContent>
-                <TabsContent value="commented" className="mt-0">
-                  {isProcessing ? (
-                    <div className="flex items-center justify-center min-h-[400px] bg-gray-900">
-                      <div className="text-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-blue-400 mx-auto mb-4" />
-                        <p className="text-white">AI is analyzing and commenting your code...</p>
-                        <div className="mt-4 w-64 bg-gray-700 rounded-full h-2 mx-auto">
-                          <div
-                            className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full animate-pulse"
-                            style={{ width: "60%" }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : commentedCode ? (
-                    <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
-                      {commentedCode}
-                    </pre>
-                  ) : (
-                    <div className="flex items-center justify-center min-h-[400px] bg-gray-900">
-                      <div className="text-center text-gray-300">
-                        <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-white">Your commented code will appear here</p>
-                        <p className="text-sm mt-2 text-gray-400">Click "Comment It" to get started</p>
-                      </div>
-                    </div>
-                  )}
-                </TabsContent>
+                {selectedFeature === "comment" && (
+                  <TabsContent value="commented" className="mt-0">
+                    {isProcessing ? (
+                      <LoadingPlaceholder />
+                    ) : outputText ? (
+                      <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
+                        {outputText}
+                      </pre>
+                    ) : (
+                      <OutputPlaceholder message="Your commented code will appear here." />
+                    )}
+                  </TabsContent>
+                )}
+                {selectedFeature === "summarize" && (
+                  <TabsContent value="summary" className="mt-0">
+                    {isProcessing ? (
+                      <LoadingPlaceholder />
+                    ) : outputText ? (
+                      <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
+                        {outputText}
+                      </pre>
+                    ) : (
+                      <OutputPlaceholder message="Code summary will appear here." />
+                    )}
+                  </TabsContent>
+                )}
+                {selectedFeature === "generate-tests" && (
+                  <TabsContent value="testcases" className="mt-0">
+                    {isProcessing ? (
+                      <LoadingPlaceholder />
+                    ) : outputText ? (
+                      <pre className="min-h-[400px] overflow-auto bg-gray-900 p-4 text-sm font-mono text-gray-100 whitespace-pre-wrap">
+                        {outputText}
+                      </pre>
+                    ) : (
+                      <OutputPlaceholder message="Test cases will appear here." />
+                    )}
+                  </TabsContent>
+                )}
               </Tabs>
-
-              {commentedCode && (
+              {selectedFeature === "comment" && outputText && (
                 <div className="border-t border-gray-700 bg-gray-800 px-4 py-2">
                   <div className="flex items-center justify-between text-xs text-gray-400">
                     <div className="flex items-center gap-4">
@@ -428,14 +601,14 @@ export default function CommentPage() {
             <Card className="border-gray-700 bg-gray-800 max-w-md mx-4">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg text-white">How was this explanation?</CardTitle>
+                  <CardTitle className="text-lg text-white">How was this output?</CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => setShowFeedback(false)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-400 mb-4">Your feedback helps us improve our AI comments</p>
+                <p className="text-gray-400 mb-4">Your feedback helps us improve our AI assistant</p>
                 <div className="flex gap-4 justify-center">
                   <Button
                     variant="outline"
